@@ -1,0 +1,188 @@
+---
+title: "Analise Lab6"
+author: "Diego Ernesto"
+output: html_document
+---
+
+No documento a seguir irmos nos aprofundar na natureza dos dados de compra e de clicks cedido pela YooChoose para a competicao RecSys Challenge 2015.
+Primeiro vamos olhar o arquivo de como se comporta as compras dos clientes.
+
+Vamos começar por um histograma do horario de compra dos clientes:
+
+
+```{r include=FALSE}
+tab5rows <- read.table("yoochoose-buys.dat", header = FALSE, nrows = 5)
+classes <- sapply(tab5rows, class)
+buys <- read.table("yoochoose-buys.dat", header = FALSE, nrows = 1150753, colClasses = classes, sep = ",")
+colnames(buys) = c("session","timestamp","itenid","price","quantity")
+
+buys$timestamp = as.numeric(as.character(substring(buys$timestamp, 12, 13)))
+```
+
+
+```{r, echo=FALSE}
+hist(buys$timestamp) 
+```
+
+É simples perceber que das 7 da manha as 7 da noite é o periodo principal de compras, tendo como destaque 5 e 6 da tarde como hora mais propença a compras.
+
+```{r, echo=FALSE}
+boxplot(buys$timestamp)
+summary(buys$timestamp)
+```
+
+Analisando o Boxplot e o sumario podemos perceber que as compras estao mais concentradas entre as 10 e 19. Podemos tambem, devido a uma distribuiçao so um pouco assimetrica, confiar na media como o horario padrao de compra: Algo proximo as 15 horas.
+
+Agora analisando o preço gasto nas compras (retiradas as entradas com 0 como preço), temos:
+```{r, echo=FALSE}
+x = subset(buys, buys$price!=0)
+hist(x$price, breaks = 500, xlim=range(0:18000))  
+```
+
+Já podemos ver de cara uma distribuicao assimetrica a direita, tambem podemos ver que quase todos os items vendidos custam menos de 6000. 
+```{r, echo=FALSE}
+boxplot(x$price)
+```
+
+Vemos no primeiro plot do Boxplot que temos muitos outliers fora da maior concentraçao de dados, onde itens chegaram a custar ate mais que 250000.
+```{r, echo=FALSE}
+boxplot(x$price, ylim=range(0:7000))
+summary(x$price)
+```
+
+Aproximando o Boxplot e com ajuda do sumario, podemos ver como o valor dos itens esta com uma concentraçao bem maior aos valores menores que 2500 e que sua maioria se concentra em valores pequenos, sendo a maioria menor que 1000. Devido a essa assimetria, devemos confiar na mediana: 1046.
+
+Vamos agora analisar em termos de quantidade:
+```{r, echo=FALSE}
+y = subset(buys, buys$quantity!=0)
+hist(y$quantity, xlim=range(0:10))
+```
+
+Podemos ver de cara uma distribuicao assimetrica a direita, tambem podemos ver que quase todas compras sao compostas de um itens. 
+```{r, echo=FALSE}
+boxplot(y$quantity)
+```
+
+Vemos no primeiro plot do Boxplot que temos muitos outliers fora da maior concentraçao de dados,ou seja, alguns contra exemplos da maioria onde muito itens foram comprados e podendo chegar ate perto de 30 itens em uma compra.
+```{r, echo=FALSE}
+boxplot(y$quantity, ylim=range(0:5))
+summary(y$quantity)
+```
+
+Aproximando o Boxplot e com ajuda do sumario, podemos ver como o valor dos itens esta com uma concentraçao quase que total em compreas de um iten so. Devido a essa assimetria (causada pelos outliers), devemos confiar na mediana: um item comprado por compra.
+
+Agora vamos partir para a analise dos poucos campos que podem ser analisados dos cliques dos usuarios:
+
+```{r include=FALSE}
+library("plyr")
+tab5rows <- read.table("yoochoose-clicks.dat", header = FALSE, nrows = 5)
+classes <- sapply(tab5rows, class)
+clicks <- read.table("yoochoose-clicks.dat", header = FALSE, nrows = 2000000, colClasses = classes, sep = ",")
+colnames(clicks) = c("session","timestamp","itenid","category")
+
+clicks$timestamp = as.numeric(as.character(substring(clicks$timestamp, 12, 13)))
+```
+
+Devido a probelmas de memoria para rodar os 1.6GB dos dados de click, foi selecionada apenas uma amostra de 2 milhoes de entradas do banco de dados. 
+```{r, echo=FALSE}
+hist(clicks$timestamp) 
+```
+
+Seguindo o encontrado para as compras, percebemos que das 7 da manha as 7 da noite é o periodo principal de compras, tendo como destaque 5 e 6 da tarde como hora mais propença a compras. Podendo assim, tracar um paralelo que o comportamento de clicks esta relacionados a efetivar compra.
+```{r, echo=FALSE}
+boxplot(clicks$timestamp)
+summary(clicks$timestamp)
+```
+
+Analisando o Boxplot e o sumario podemos perceber que as clicks estao mais concentradas entre as 10 e 19. Podemos tambem, devido a uma distribuiçao so um pouco assimetrica, confiar na media como o horario padrao de mais clicks: Algo proximo as 14 horas.
+
+Tentamos analisar tambem as categorias e tracar um paralelo do horario dos clicks a uma categoria ou se uma sessao (compra) teve mais de uma categoria, mas o campo é representado so por zeros (que segundo o guia indica "categoria nao identificada").
+
+***ESTRATEGIA***
+1) RANKING
+Nossa estrategia se baseava em rankear itens usando uma formula que ponderava a vendabilidade (numero de vendas de um item / numero de clicks nesse mesmo item) e o preco proporcional de um item (Media de preco mais vendida/ valor do produto). Nossa tabela de rankin era entao ordenada por categoria (primeiro) e pelo resultado dessa formula (segundo).
+Devido ao tamanho dos dados, o Ranking contabilizou apenas as categorias que se encontravam entre 1 e 12 mais a S (special offer).
+
+```{r , eval = FALSE}
+#preparando o rankin
+
+colnames(itemsRankin) = c("session","category","vendability")
+itemsRankin["price"] <- 0
+itemsRankin["recomendador"] <- 0
+count = 1
+for(i in 1:nrow(itemsRankin)){
+  print(i)
+  if(itemsRankin[i,1] > itemPrices[count,1]){
+    inc(count)
+  }
+  if(itemsRankin[i,1] == itemPrices[count,1]){
+    itemsRankin[i,4] = itemPrices[count,2]
+    inc(count)
+  }else{
+    itemsRankin[i,4] = 0
+  }
+}
+
+inc <- function(x)
+{
+  eval.parent(substitute(x <- x + 1))
+}
+
+#Somando o ranking
+valor = 0
+for(i in 1:nrow(itemsRankin)){
+  print(i)
+  valor = itemsRankin[i,3] + (1046/itemsRankin[i,4])
+
+  if(!is.infinite(valor)){
+    itemsRankin[i,5] = valor
+  }else{
+    itemsRankin[i,5] = 0
+  }
+}
+
+x = itemsRankin[order(itemsRankin$category,-(itemsRankin$recomendador) ),]
+```
+
+2)PREDICAO
+Inicialmente fizemos um merge entre a tabela de clicks e a de compra, para saber quais clicks resultaram em compras
+```{r , eval = FALSE}
+compra = intersect(clicksLim$session,buysLim$session)
+clicksLim["buy"] <- 0
+clicksLim$buy <- clicksLim$session %in% compra
+```
+
+Nosso primeiro passo foi gerar uma Arvore de predicao (usando a biblioteca C50 em R) para gerar uma tabela onde um click fosse considerado como um comprador em potencial ou nao.
+```{r , eval = FALSE}
+library("C50")
+
+#gerando o modelo
+clicksLim$X <- NULL
+fac_buy <- factor(clicksLim$buy)
+buy_model <- C5.0(clicksLim[,-5], fac_buy)
+summary(buy_model)
+
+#doismilhoes.csv usa apenas as 2M primeiras linhas do dataset que se encontram nas categoria 1 ate 12 ou S
+teste <- read.table("doismilhoes.csv", nrows = 2000000,header = FALSE, sep = " ")
+colnames(teste) = c("session","timestamp","itenid","category")
+teste$timestamp = as.numeric(as.character(substring(teste$timestamp, 12, 13)))
+teste$buyPrev <- FALSE
+
+p <- predict( buy_model, teste, type="class" )
+c = data.frame(teste$session,teste$timestamp,teste$itenid,teste$category,p)
+```
+Para os compradores em potencial, mediante a categoria do seu click, recomendavamos 5 itens mais relevantes da tabela de rankeamento mediante a formula (citada anteriormente).
+```{r , eval = FALSE}
+predicaoDeBuys["itensRec"] <- 0
+#nao pegar a tabela de predicao de buys de uma vez
+for(i in 1:nrow(predicaoDeBuys)){
+  if(predicaoDeBuys[i,5]==TRUE){
+
+    for(k in 1:nrow(PegandoRankin)){
+      if(predicaoDeBuys[i,4] = PegandoRankin[k,3]){
+        predicaoDeBuys[i,6] = paste(PegandoRankin[k,2],PegandoRankin[(k+1),2],PegandoRankin[(k+2),3],PegandoRankin[(k+3),3],PegandoRankin[(k+4),3])
+      }
+    }
+  }
+}
+```
